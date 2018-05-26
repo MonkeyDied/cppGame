@@ -3,6 +3,8 @@
  * Wraping System API
  */
 
+namespace sysapi {
+	
 // For a rect on screen
 // in pixel coords
 struct Rect {
@@ -25,3 +27,5 @@ bool getWindowRect(Rect& rect);
 // Then read the buffer through getScreenColor
 void captureScreen();
 unsigned int getScreenColor(int x, int y);
+
+} // namespace sysapi

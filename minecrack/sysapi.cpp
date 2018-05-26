@@ -2,6 +2,12 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <vector>
+#include <iostream>
+using std::cout;
+using std::endl;
+
+
+namespace sysapi {
 
 // Some Staff From Internet
 void getMousePosition(int& xPos, int& yPos)
@@ -88,9 +94,6 @@ void mouseMoveTo(int toX, int toY)
 	::SendInput(1, &Input, sizeof(INPUT));
 }
 
-
-
-
 typedef struct EnumHWndsArg
 {
 	std::vector<HWND> *vecHWnds;
@@ -141,7 +144,6 @@ void GetHWndsByProcessID(DWORD processID, std::vector<HWND> &vecHWnds)
 	EnumWindows(lpEnumFunc, (LPARAM)&wi);
 }
 
-
 bool getWindowRect(Rect& rect) {
 	DWORD pid = GetProcessIDByName("ms_arbiter.exe");
 	if (pid != 0)
@@ -155,9 +157,9 @@ bool getWindowRect(Rect& rect) {
 				if (test.right - test.left == 510 &&
 					test.bottom - test.top == 400)
 				{
-					rect.left   = test.left;
-					rect.right  = test.right;
-					rect.top    = test.top;
+					rect.left = test.left;
+					rect.right = test.right;
+					rect.top = test.top;
 					rect.bottom = test.bottom;
 					return true;
 				}
@@ -187,9 +189,6 @@ unsigned int getScreenColor2(int x, int y) {
 	return (unsigned int)color;
 }
 
-#include <iostream>
-using std::cout;
-using std::endl;
 std::vector<BYTE> pixels;
 BITMAPINFO MyBMInfo = { 0 };
 
@@ -214,8 +213,8 @@ void captureScreen() {
 
 	SelectObject(hCaptureDC, hOld); // always select the previously selected object once done
 	DeleteDC(hCaptureDC);
-	
-	
+
+
 	MyBMInfo.bmiHeader.biSize = sizeof(MyBMInfo.bmiHeader);
 
 	// Get the BITMAPINFO structure from the bitmap
@@ -261,8 +260,7 @@ void captureScreen() {
 unsigned int getScreenColor(int x, int y) {
 	size_t pixelOffset = y * scanlineSize + x * pixelSize;
 	return RGB(pixels[pixelOffset + 2],
-			   pixels[pixelOffset + 1],
-			   pixels[pixelOffset + 0]);
+		pixels[pixelOffset + 1],
+		pixels[pixelOffset + 0]);
 }
-
-
+}
