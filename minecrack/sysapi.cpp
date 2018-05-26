@@ -259,8 +259,12 @@ void captureScreen() {
 
 unsigned int getScreenColor(int x, int y) {
 	size_t pixelOffset = y * scanlineSize + x * pixelSize;
+	if (pixels.size() <= pixelOffset + 2) {
+		cout << "Failed to get Screen Color, Need refresh first!" << endl;
+		return 0;
+	}
 	return RGB(pixels[pixelOffset + 2],
-		pixels[pixelOffset + 1],
-		pixels[pixelOffset + 0]);
+			   pixels[pixelOffset + 1],
+			   pixels[pixelOffset + 0]);
 }
 }

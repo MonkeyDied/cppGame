@@ -33,10 +33,17 @@ enum {
 	TileUnknown = -1,
 	TileMine = -4,	// An Unknown tile deduced to be mine
 	TileSafe = -5,	// An Unknown tile deduced to be safe
+	TileFlag = -6,
 	TileBorderWithZero = -7,	// For tile selection
 	TileBorder = -8,			// For tile selection	
 	TileZero = 0
 };
+enum {
+	GameLose    = -1,
+	GameRunning = 0,
+	GameWin     = 1
+};
+
 inline int basicTileType(int type) {
 	if (type == TileMine || type == TileSafe)
 		return TileUnknown;
@@ -132,33 +139,7 @@ public:
 		from_serial(index, x, y);
 		return click(x, y);
 	}
-	int tile(int i, int j) const {
-		unsigned int c_mine = item.back();
-		unsigned int c = sysapi::getScreenColor(toX(i), toY(j));
-		if (c == item[0]) {
-			// need further check
-			unsigned int c2 = sysapi::getScreenColor(toX(i), toY(j) - 7);
-			//fmt::print("Color below 8 {:x}\n", c2);
-			if (c2 == 0xffffff){
-				return TileUnknown;
-			}
-			c2 = sysapi::getScreenColor(toX(i) + 1, toY(j));
-			if (c2 == 0) {
-				return 7;
-			}
-			return TileZero;
-		}
-		else {
-			auto it = std::find(item.begin(), item.end(), c);
-			if (it == item.end()) {
-				fmt::print("Warn: Find an unknown color {:x}, at i/j={}/{}\n", c, i, j);
-				return TileError;
-			}
-			if (c == c_mine)
-				return TileBoom;
-			return it - item.begin();
-		}
-	}
+	int tile(int i, int j) const;
 
 	unsigned int color(int i, int j) const {
 		return sysapi::getScreenColor(toX(i), toY(j));
@@ -166,10 +147,22 @@ public:
 
 	bool good() const {
 		unsigned int c = sysapi::getScreenColor(rect.left + smile[0], rect.top + smile[1]);
-		if (c == 0xffff) 
+		if (c == 0xffff) {
+			// 257, 73
 			return true;
+		}
 		return false;
 	}
+	int state() const {
+		auto c1 = sysapi::getScreenColor(rect.left + smile[0], rect.top + smile[1]);
+		auto c2 = sysapi::getScreenColor(rect.left + smile[2], rect.top + smile[3]);
+		if (c1 == 0xffff) {
+			if (c2 == 0) return GameWin;
+			return GameRunning;
+		}
+		return GameLose;
+	}
+
 	void reset() {
 		sysapi::mouseMoveTo(rect.left + smile[0], rect.top + smile[1]);
 		sysapi::mouseLeftClick();
@@ -185,16 +178,12 @@ public:
 		return sysapi::getWindowRect(rect);
 	}
 	void refresh_grid() {
-		using namespace gamedata;
 		sysapi::captureScreen();
-		// read screen pxiels
-		for (int i = 0; i < nX; ++i) {
-			auto& col = grid[i];
-			for (int j = 0; j < nY; ++j){
-				int c = tile(i, j);
-				col[j] = c;
-			}
-		}
+
+		auto iter = whole_grid();
+		do {
+			iter.at(grid) = tile(iter.x(), iter.y());
+		} while(iter.next());
 	}
 	
 	void show_grid() {
@@ -212,7 +201,7 @@ public:
 	}
 
 	static const int base[2];
-	static const int smile[2];
+	static const int smile[4];
 	static const std::vector<unsigned int> item;
 	static const int dq = 16;
 };

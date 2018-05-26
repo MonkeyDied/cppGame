@@ -10,6 +10,8 @@
 #include "mine.hpp"
 #include "fmt/format.h"
 #include "fmt/printf.h"
+using std::cin;
+
 
 // Some Utility functions about set operation
 std::set<int> set_union(const std::set<int>& to, const std::set<int>& from) {
@@ -79,6 +81,16 @@ public:
 					fmt::print("Warning: Get a tile of TypeBoom!\n");
 					return false;
 				}
+				if (vNew == TileFlag) {
+					if (iter.at(grid) != TileMine) {
+						// There seems to be some bugs here, ignoring...
+						/*
+						fmt::print("Adding a hand-chosen mine point at {}/{}, origin type is {}\n", 
+							iter.x(), iter.y(), tileChar(iter.at(grid)));
+						flagMine(iter.x(), iter.y());
+						*/
+					}
+				}
 				if (vNew >= 0 && vMe >= 0) {
 					// This is known tile, but value may be updated
 					// So we won't update the grid
@@ -103,7 +115,7 @@ public:
 
 	// Phase One
 	bool analysis(std::set<int>& safe, std::set<int>& mine) {
-		int nchanged = 0;
+		size_t size_old = safe.size() + mine.size();
 		auto iter = whole_grid();
 		do {
 			int& remain = iter.at(grid);
@@ -113,9 +125,7 @@ public:
 					// The rest are mine
 					auto unMe = unknownOf(iter.x(), iter.y());
 					for (auto one : unMe) {
-						flagMine(one);
-						mine.insert(one);
-						nchanged++;
+						flagMine(one, &mine);
 					}
 					remain = 0;	// This tile is done
 				}
@@ -123,19 +133,16 @@ public:
 			else if (remain == 0) {
 				auto unMe = unknownOf(iter.x(), iter.y());
 				for (auto one : unMe) {
-					flagSafe(one);
-					safe.insert(one);
-					nchanged++;
+					flagSafe(one, &safe);
 				}
 			}
 		} while (iter.next());
-		return nchanged > 0;
+		return safe.size() + mine.size() > size_old;
 	}
 
 	// Phase Two
 	bool analysis_ex(std::set<int>& safe, std::set<int>& mine) {
-		using namespace gamedata;
-		int nchanged = 0;
+		size_t size_old = safe.size() + mine.size();
 		auto item = whole_grid();
 		do {
 			if (item.at(grid) > 0) {
@@ -149,26 +156,28 @@ public:
 				int meRemain = grid[i][j];
 				if (meRemain == unMe.size()) {
 					for (auto one : unMe) {
-						flagMine(one);
-						nchanged++;
+						flagMine(one, &mine);
 					}
 					continue;
 				}
-				for (auto idx_border : borderOf(i, j)) {
+
+				auto neighbours = find(grid, GridIter(i, j, 2, 2), TileBorder);
+				for (auto idx_border : neighbours) {
 					int i2, j2;
 					from_serial(idx_border, i2, j2);
 					if (grid[i2][j2] == 0) {
 						for (auto one : unknownOf(i2, j2)) {
-							flagSafe(one);
-							nchanged++;
+							flagSafe(one, &safe);
 						}
 					}
 
 					auto unIt = unknownOf(i2, j2);
 					auto unMutual   = set_intersect(unIt, unMe);
+					if (unMutual.empty())
+						continue;
+
 					auto unItExcept = set_diff(unIt, unMutual);
 					auto unMeExcept = set_diff(unMe, unMutual);
-					
 
 					int itRemain = grid[i2][j2];
 					int ub = std::min((int)unMutual.size(), itRemain);
@@ -177,24 +186,18 @@ public:
 					if (ub + unMeExcept.size() == meRemain) {
 						// All in unMeExcept are mines
 						for (auto one : unMeExcept) {
-							flagMine(one);
-							mine.insert(one);
-							nchanged++;
+							flagMine(one, &mine);
 						}
 
 						if ((int)unMutual.size() >= itRemain) {
 							// And all in unItExcept may be safe
 							// Note unMutual.size() should always > itRemain if phase 1 is properly done
 							for (auto one : unItExcept) {
-								flagSafe(one);
-								safe.insert(one);
-								nchanged++;
+								flagSafe(one, &safe);
 							}
 							if ((int)unMutual.size() == itRemain) {
 								for (auto one : unMutual) {
-									flagMine(one);
-									mine.insert(one);
-									nchanged++;
+									flagMine(one, &mine);
 								}
 							}
 						}
@@ -206,22 +209,16 @@ public:
 					else if (lb == meRemain) {
 						// All in unMeExcept are safe
 						for (auto one : unMeExcept) {
-							flagSafe(one);
-							safe.insert(one);
-							nchanged++;
+							flagSafe(one, &safe);
 						}
 						if ((int)unItExcept.size() <= itRemain) {
 							// and all in unItExcept may be mines
 							for (auto one : unItExcept) {
-								flagMine(one);
-								mine.insert(one);
-								nchanged++;
+								flagMine(one, &mine);
 							}
 							if ((int)unItExcept.size() == itRemain) {
 								for (auto one : unMutual) {
-									flagSafe(one);
-									safe.insert(one);
-									nchanged++;
+									flagSafe(one, &safe);
 								}
 							}
 						}
@@ -234,24 +231,29 @@ public:
 			}
 		} while (item.next());
 
-		return nchanged > 0;
+		return safe.size() + mine.size() > size_old;
 	}
 
 	bool analysis_guess(std::set<int>& safe, std::set<int>& mine, int max_guess = 2) {
 		// TODO: add some mechanism to guess mines when you cant do it by deduction
+
+
+
 	}
 	
-	void flagSafe(int index) {
+	void flagSafe(int index, std::set<int>* store = nullptr) {
 		int i, j;
 		from_serial(index, i, j);
 		grid[i][j] = TileSafe;
+		if (store) store->insert(index);
 	}
 
-	void flagMine(int i, int j) {
+	void flagMine(int i, int j, std::set<int>* store = nullptr) {
 		if (basicTileType(grid[i][j]) == TileUnknown) {
 			if (grid[i][j] != TileMine) {
 				grid[i][j] = TileMine;
-				
+				if (store) store->insert(serial_index(i, j));
+
 				for (auto index : borderOf(i, j)) {
 					int x, y;
 					from_serial(index, x, y);
@@ -265,10 +267,10 @@ public:
 			}
 		}
 	}
-	void flagMine(int index) {
+	void flagMine(int index, std::set<int>* store = nullptr) {
 		int x, y;
 		from_serial(index, x, y);
-		flagMine(x, y);
+		flagMine(x, y, store);
 	}
 
 	Stats stats(int i, int j) {
@@ -290,8 +292,7 @@ public:
 	grid_t grid;
 };
 
-#include <iostream>
-using std::cin;
+
 int main() {
 	using namespace gamedata;
 	sysapi::auxiliary_init();
@@ -310,6 +311,26 @@ int main() {
 		printf("Input cmd: ");
 		cin >> cmd;
 		if (cmd == "q") break;
+		if (cmd == "s") {
+			mine.refresh_grid();
+			auto c = sysapi::getScreenColor(
+				mine.rect.left + MineS::smile[0], 
+				mine.rect.top + MineS::smile[1]);
+
+			int s = mine.state();
+			fmt::print("State color is {:x}, game state is {}\n", c, s);
+		}
+		if (cmd == "mcolor") {
+			int _x, _y;
+			sysapi::captureScreen();
+			sysapi::getMousePosition(_x, _y);
+			auto c = sysapi::getScreenColor(_x, _y);
+			int dx, dy;
+			dx = _x - mine.rect.left;
+			dy = _y - mine.rect.top;
+			fmt::print("Mouse at {}/{}, dx/dy is {}/{}, color is {:x}\n", 
+				_x, _y, dx, dy, c);
+		}
 		if (cmd == "s0") {
 			print_grid(mine.grid);
 		}
@@ -368,7 +389,9 @@ int main() {
 			mine.reset_grid();
 			mine.refresh_rect();
 			algo.reset();
-			while (1) {
+			mine.refresh_grid();
+
+			while (mine.state() == GameRunning) {
 				mine.refresh_grid();
 				algo.update(mine.grid);
 				
@@ -388,105 +411,19 @@ int main() {
 					mine.click(one);
 				}
 			}
-		}
-	}
-
-	sysapi::auxiliary_exit();
-	return 0;
-}
-
-
-int main_1() {
-	using namespace gamedata;
-	MineS mine;
-	sysapi::auxiliary_init();
-	sysapi::Rect& rect = mine.rect;
-	if (!sysapi::getWindowRect(rect)) {
-		puts("Failed to get Window Rect of Arbiter");
-	}
-	else {
-		fmt::print("WinRect: L/R/T/B, {}/{}/{}/{}\n",
-			rect.left, rect.right, rect.top, rect.bottom);
-	}
-
-	int x, y;
-	sysapi::getMousePosition(x, y);
-	fmt::print("Mouse: x/y, {}/{}\n", x, y);
-
-	while (1) {
-		char c = getchar();
-		if (c == 'c') {
-			puts("Capturing screen");
-			sysapi::captureScreen();
-		}
-		if (c == 'p') {
-			sysapi::getMousePosition(x, y);
-			
-			int dx = x - rect.left - MineS::base[0];
-			int dy = y - rect.top - MineS::base[1];
-			int nx = int(dx*1.0 / MineS::dq + 0.5);
-			int ny = int(dy*1.0 / MineS::dq + 0.5);
-			unsigned int color = mine.color(nx, ny);
-			unsigned int color1 = sysapi::getScreenColor(x, y);
-			int tile = mine.tile(nx, ny);
-
-			fmt::print("Mouse: x/y, {}/{}, at Tile {}, {}, Color {:x}, color {:x}, status: {}, tile: {}\n", 
-				x, y, nx, ny, color1, color, (mine.good()? "good": "bad"), tile);
-		}
-		if (c == 'm') {
-			sysapi::getMousePosition(x, y);
-
-			int dx = x - rect.left - MineS::base[0];
-			int dy = y - rect.top - MineS::base[1];
-			int nx = int(dx*1.0 / MineS::dq + 0.5);
-			int ny = int(dy*1.0 / MineS::dq + 0.5);
-			mine.click(nx, ny);
-			std::this_thread::sleep_for(std::chrono::milliseconds(50));
-			unsigned int color = mine.color(nx, ny);
-			fmt::print("Color = {:x}\n", color);
-		}
-		if (c == 's') {
-			mine.refresh_grid();
-			puts("Showing");
-			mine.show_grid();
-		}
-		if (c == 't' || c == 'T' || c == 'Z') {
-			int num = (c == 't') ? 5 : 
-					  (c == 'T') ? 100 : 1000;
-			// 0 is mine
-			std::vector<unsigned> data = { 0xc0c0c0,	0xff0000,		0x8000,		0xff,	0x800000, 0x80, 0 };
-			for (int i = 0; i < num; ++i) {
-				int nx = rand() % 30;
-				int ny = rand() % 16;
-				mine.click(nx, ny);
-				wait(30);
-				if (!mine.good()) {
-					mine.reset();
-					wait(100);
-				}
-				else {
-					unsigned int color = mine.color(nx, ny);
-					auto iter = std::find(data.begin(), data.end(), color);
-					if (iter == data.end()) {
-						fmt::print("New item found! color = {}\n", color);
-						c = getchar();
-						if (c == 'r') {
-							puts("Continuing");
-							data.push_back(color);
-						}
-						else {
-							break;
-						}
-					}
-					else {
-						fmt::print("Found item {}\n", iter - data.begin());
-					}
-				}
+			// It seems that detecting the simile face is not very easy...
+			// The color is right, but there seems to be a lag
+			wait(500);
+			if (mine.state() == GameWin) {
+				fmt::print("I win~\n");
 			}
-			puts("Done.");
-		}
-		if (c == 'q') {
-			break;
+			else if (mine.state() == GameLose) {
+				fmt::print("I Lose...\n");
+			}
+			else {
+				fmt::print("----Current algo.grid is----\n");
+				print_grid(algo.grid);
+			}
 		}
 	}
 
